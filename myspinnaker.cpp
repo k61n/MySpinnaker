@@ -3,6 +3,7 @@
 MySpinnaker::MySpinnaker(QObject *parent)
 {
     Q_UNUSED(parent);
+
     // Retrieve singleton reference to system object
     system = System::GetInstance();
     // Retrieve list of cameras from the system
@@ -19,10 +20,10 @@ MySpinnaker::MySpinnaker(QObject *parent)
         // Release system
         system->ReleaseInstance();
 
-        qDebug() << "Not camera detected. Aborting the program";
+        qDebug() << "No camera detected. Aborting the program";
     }
 
-    pCam = NULL;
+    pCam = nullptr;
 
     pCam = camList.GetByIndex(0);
 
@@ -34,38 +35,36 @@ MySpinnaker::MySpinnaker(QObject *parent)
         // Retrieve GenICam nodemap
         nodeMap = &pCam->GetNodeMap();
 
-        width = pCam->Width.GetValue();
-        height = pCam->Height.GetValue();
-        exposureTime = pCam->ExposureTime.GetValue();
-        pixelFormat = pCam->PixelFormat.GetValue();
+        //pixelFormat = pCam->PixelFormat.GetValue();
         qDebug() <<"Initialized Spinnaker compatible camera ("
-                 << width << "x" << height
+                 << pCam->Width.GetValue() << "x" << pCam->Height.GetValue()
                  << pCam->PixelFormat.GetCurrentEntry()->GetSymbolic()
                  << ")";
-        qDebug() <<"Exposure time" << exposureTime << "us";
-        isInitialized = true;
+        qDebug() <<"Exposure time" << pCam->ExposureTime.GetValue() << "us";
     }
     catch (Spinnaker::Exception &e){
         qDebug() << "Error: " << e.what() ;
     }
-
 }
 
 MySpinnaker::~MySpinnaker()
 {
     pCam->DeInit();
-    pCam = NULL;
+    pCam = nullptr;
+    nodeMapTLDevice = nullptr;
+    nodeMap = nullptr;
     camList.Clear();
     system->ReleaseInstance();
 }
 
 cv::Mat MySpinnaker::getImage()
 {
-    //Acquisition begins and ends every launch of the method
-    pCam->BeginAcquisition();
-    qDebug() << "Acquiring image...";
-
+    //Acquisition begins if camera is not streaming
+    if (!pCam->IsStreaming())
+        pCam->BeginAcquisition();
+    //spinnaker class for acquired image
     ImagePtr img = pCam->GetNextImage();
+    //opencv class for acuired image
     cv::Mat cvMat;
 
     if (img->IsIncomplete()){
@@ -73,20 +72,39 @@ cv::Mat MySpinnaker::getImage()
     }
     else{
         int cvFormat = CV_8UC1; //openCV format that corresponds to BayerRG8 for Backfly S BFS-U3-200S6C-C
-
         unsigned int XPadding = img->GetXPadding();
         unsigned int YPadding = img->GetYPadding();
         unsigned int rowsize = img->GetWidth();
         unsigned int colsize = img->GetHeight();
-        qDebug() << "Grabbed image, width =" << rowsize + XPadding << ", height =" << colsize + YPadding;
-
+        //conversion from ImagePtr to cv::Mat
         cvMat = cv::Mat(colsize + YPadding, rowsize + XPadding, cvFormat, img->GetData(), img->GetStride());
+        //conversion of channels from BayerRG8 to RGB
         cv::cvtColor(cvMat, cvMat, cv::COLOR_BayerRG2RGB_EA);
     }
+    //Release spinnaker image class
     img->Release();
-    pCam->EndAcquisition();
+    //Acquisition ends if streaming is not required
+    if (!streamingIsRequested)
+        pCam->EndAcquisition();
 
     return cvMat;
+}
+
+//method for capturing images in a separate thread
+void MySpinnaker::stream()
+{
+    while (streamingIsRequested)
+        emit on_capture(getImage());
+}
+
+void MySpinnaker::on_start_streaming()
+{
+    streamingIsRequested = true;
+}
+
+void MySpinnaker::on_stop_streaming()
+{
+    streamingIsRequested = false;
 }
 
 void MySpinnaker::setExposure(double exposureTimeToSet)
@@ -112,7 +130,6 @@ void MySpinnaker::setExposure(double exposureTimeToSet)
         if(exposureTimeToSet > exposureTimeMax){
             exposureTimeToSet = exposureTimeMax;
         }
-        exposureTime = exposureTimeToSet;
         ptrExposureTime->SetValue(exposureTimeToSet);
         qDebug() << "Exposure time set to " << exposureTimeToSet << " us...";
     }

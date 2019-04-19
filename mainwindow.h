@@ -3,9 +3,11 @@
 
 #include <QMainWindow>
 #include <QObject>
-#include "opencv2/core.hpp"
-#include "opencv2/highgui.hpp"
 #include "myspinnaker.h"
+//#include "opencv2/core.hpp"
+//#include "opencv2/highgui.hpp"
+//#include "opencv2/imgproc/imgproc.hpp"
+#include <QGraphicsScene>
 
 namespace Ui {
 class MainWindow;
@@ -18,15 +20,24 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    void updateScene(cv::Mat cvMat);
 
 signals:
+    void on_stream_start_request();
+    void on_stream_stop_request();
+
+public slots:
+    void on_received(cv::Mat cvMat);
+
 private slots:
     void on_pushButton_clicked();
+    void on_pushButton_2_clicked();
+    void on_pushButton_3_clicked();
 
 private:
     Ui::MainWindow *ui;
     MySpinnaker *camera;
-    cv::Mat imgFromFlir;
+    QGraphicsScene *scene;
 };
 
 #endif // MAINWINDOW_H
