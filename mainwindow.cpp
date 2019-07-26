@@ -19,7 +19,7 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(this, &MainWindow::on_stream_stop_request, camera, &MySpinnaker::on_stop_streaming);
 
     scene = new QGraphicsScene(this);
-    scene->setSceneRect(QRectF(QPointF(0, 0), QPointF(600, 400)));
+    scene->setSceneRect(QRectF(QPointF(0, 0), QPointF(900, 600)));
     ui->graphicsView->setScene(scene);
 }
 
@@ -30,23 +30,23 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-void MainWindow::updateScene(cv::Mat cvMat)
-{
-    QImage img = QImage((uchar*)cvMat.data, cvMat.cols, cvMat.rows, cvMat.step, QImage::Format_RGB888);
-    img = img.scaledToWidth(scene->sceneRect().width());
-    scene->clear();
-    scene->addPixmap(QPixmap::fromImage(img.rgbSwapped()));
-}
-
 void MainWindow::on_received(cv::Mat cvMat)
 {
-    updateScene(cvMat);
+    QImage img = QImage(cvMat.data, cvMat.cols, cvMat.rows, static_cast<int>(cvMat.step), QImage::Format_RGB888);
+    if (ui->checkZoom->isChecked()) {
+        img = img.copy(QRect(2286, 1524, 900, 600));
+    }
+    else {
+        img = img.scaled(900, 600, Qt::KeepAspectRatio);
+    }
+    scene->clear();
+    scene->addPixmap(QPixmap::fromImage(img.rgbSwapped()));
 }
 
 void MainWindow::on_pushButton_clicked()
 {
     cv::Mat test_image = camera->getImage();
-    updateScene(test_image);
+    this->on_received(test_image);
 }
 
 void MainWindow::on_pushButton_2_clicked()
@@ -58,4 +58,12 @@ void MainWindow::on_pushButton_2_clicked()
 void MainWindow::on_pushButton_3_clicked()
 {
     emit on_stream_stop_request();
+}
+
+void MainWindow::on_pushButton_4_clicked()
+{
+    cv::Mat cvMat = camera->getImage();
+    QImage img = QImage(cvMat.data, cvMat.cols, cvMat.rows, static_cast<int>(cvMat.step), QImage::Format_RGB888);
+    img.save("wafer.png");
+    qDebug() << "Image saved";
 }
